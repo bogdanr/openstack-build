@@ -1,39 +1,10 @@
 #!/bin/bash
 
 set -e
-set -x
+#set -x
 
 KEYSTONEPASS="`openssl rand -base64 16`"
 ADMINPASS="AnaAre3Mere"
-
-install() {
-
-  cd keystone
-
-  easy_install pip pbr MySQL-python
-
-  python setup.py install
-
-  ( cd /tmp && wget http://packages.nimblex.net/nimblex/rabbitmq-server-3.1.5-x86_64-1.txz && installpkg rabbitmq-server-3.1.5-x86_64-1.txz )
-
-  mkdir -p /etc/keystone/ssl/{private,certs} /var/log/openstack
-
-  CONF="/etc/keystone/keystone.conf"
-  cp etc/keystone.conf.sample $CONF
-  cp etc/keystone-paste.ini /etc/keystone/
-  sed -i "s,#connection=<None>,connection = mysql://keystone:$KEYSTONEPASS@127.0.0.1/keystone," $CONF
-
-  keystone-manage db_sync
-  export OS_SERVICE_TOKEN=`openssl rand -hex 10`
-  sed -i "s,#admin_token=ADMIN,admin_token=$OS_SERVICE_TOKEN," $CONF
-
-  sed -i "s,#log_dir=<None>,log_dir=/var/log/openstack," $CONF
-  sed -i "s,#log_file=<None>,log_file=keystone.log," $CONF
-
-  keystone-all &
-  sleep 1
-
-}
 
 setupsql() {
 
@@ -48,6 +19,43 @@ setupsql() {
 
 }
 
+install() {
+
+  cd keystone
+
+  useradd -s /bin/false -d /var/lib/keystone -m keystone
+
+  easy_install pip pbr MySQL-python
+
+  python setup.py install
+
+  ( cd /tmp && wget http://packages.nimblex.net/nimblex/rabbitmq-server-3.1.5-x86_64-1.txz && installpkg rabbitmq-server-3.1.5-x86_64-1.txz )
+
+  mkdir -p /etc/keystone/ssl/{private,certs} /var/log/openstack
+  touch /var/log/openstack/keystone.log
+  cp ../openssl.conf /etc/keystone/ssl/certs/
+  chown -R keystone /etc/keystone/ /var/log/openstack/keystone.log
+
+  CONF="/etc/keystone/keystone.conf"
+  cp etc/keystone.conf.sample $CONF
+  cp etc/keystone-paste.ini /etc/keystone/
+  sed -i "s,#connection=<None>,connection = mysql://keystone:$KEYSTONEPASS@127.0.0.1/keystone," $CONF
+  unset KEYSTONEPASS
+
+  keystone-manage db_sync
+  export OS_SERVICE_TOKEN=`openssl rand -hex 10`
+  sed -i "s,#admin_token=ADMIN,admin_token=$OS_SERVICE_TOKEN," $CONF
+
+  sed -i "s,#log_dir=<None>,log_dir=/var/log/openstack," $CONF
+  sed -i "s,#log_file=<None>,log_file=keystone.log," $CONF
+
+  su -s /bin/sh -c 'exec keystone-manage pki_setup' keystone
+
+  keystone-all &
+  sleep 3
+
+}
+
 configure() {
 
 #	---  Define users, tenants, and roles ---
@@ -59,6 +67,8 @@ configure() {
   keystone user-create --name=admin --pass=$ADMINPASS --email=bogdan@nimblex.net
   keystone role-create --name=admin
   keystone tenant-create --name=admin --description="Admin Tenant"
+  sleep 3
+
   keystone user-role-add --user=admin --tenant=admin --role=admin
   keystone user-role-add --user=admin --role=_member_ --tenant=admin
 
@@ -70,9 +80,6 @@ configure() {
   keystone service-create --name=keystone --type=identity --description="OpenStack Identity"
   keystone endpoint-create --service-id=$(keystone service-list | awk '/ identity / {print $2}') --publicurl=http://127.0.0.1:5000/v2.0 --internalurl=http://127.0.0.1:5000/v2.0 --adminurl=http://127.0.0.1:35357/v2.0
 
-	# Before we can test we need to set PKI
-	# http://docs.openstack.org/developer/keystone/configuration.html#certificates-for-pki
-
 }
 
 validate() {
@@ -82,6 +89,8 @@ validate() {
 }
 
 clean() {
+
+  userdel -r keystone
 
   rm -r /etc/keystone/
   sh /etc/rc.d/rc.mysqld stop
@@ -97,8 +106,9 @@ if [[ ! -f /etc/keystone/keystone.conf ]]; then
   install
 fi
 
-configure
+# This should make it sufficient to run the script again after installing to see if all went fine.
+if ! validate; then
+  configure
+fi
 
-validate
-
-echo -e "\n === The password for admin user is $ADMINPASS ==="
+echo -e "\n === The password for admin user is $ADMINPASS === \n"
