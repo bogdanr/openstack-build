@@ -3,14 +3,22 @@
 set -e
 #set -x
 
+. 00-configs
+
 KEYSTONEPASS="`openssl rand -base64 16`"
-ADMINPASS="AnaAre3Mere"
 
 setupsql() {
 
   slapt-get -u
   slapt-get -i mariadb
   sed -i 's,SKIP="--skip-networking",# SKIP="--skip-networking",' /etc/rc.d/rc.mysqld
+  echo "[mysqld]
+
+  default-storage-engine = innodb
+  collation-server = utf8_general_ci
+  init-connect = 'SET NAMES utf8'
+  character-set-server = utf8
+  " > /etc/my.cnf.d/utf8.cnf
   mysql_install_db --user=mysql
   sh /etc/rc.d/rc.mysqld restart
 
@@ -21,11 +29,11 @@ setupsql() {
 
 install() {
 
+  easy_install pip pbr MySQL-python
+
   cd keystone
 
   useradd -s /bin/false -d /var/lib/keystone -m keystone
-
-  easy_install pip pbr MySQL-python
 
   python setup.py install
 
@@ -38,7 +46,7 @@ install() {
 
   CONF="/etc/keystone/keystone.conf"
   cp etc/keystone.conf.sample $CONF
-  cp etc/keystone-paste.ini /etc/keystone/
+  cp etc/keystone-paste.ini etc/policy.json /etc/keystone/
   sed -i "s,#connection=<None>,connection = mysql://keystone:$KEYSTONEPASS@127.0.0.1/keystone," $CONF
   unset KEYSTONEPASS
 
@@ -61,7 +69,7 @@ configure() {
 #	---  Define users, tenants, and roles ---
 #	http://docs.openstack.org/icehouse/install-guide/install/apt/content/keystone-users.html
 
-  export OS_SERVICE_ENDPOINT=http://127.0.0.1:35357/v2.0
+  export OS_SERVICE_ENDPOINT=http://$CONTROLLER_IP:35357/v2.0
   export OS_SERVICE_TOKEN=`awk -F '=' '/admin_token=/ {print $2}' /etc/keystone/keystone.conf`
 
   keystone user-create --name=admin --pass=$ADMINPASS --email=bogdan@nimblex.net
@@ -78,23 +86,21 @@ configure() {
   keystone tenant-create --name=service --description="Service Tenant"
 
   keystone service-create --name=keystone --type=identity --description="OpenStack Identity"
-  keystone endpoint-create --service-id=$(keystone service-list | awk '/ identity / {print $2}') --publicurl=http://127.0.0.1:5000/v2.0 --internalurl=http://127.0.0.1:5000/v2.0 --adminurl=http://127.0.0.1:35357/v2.0
+  keystone endpoint-create --service-id=$(keystone service-list | awk '/ identity / {print $2}') --publicurl=http://$CONTROLLER_IP:5000/v2.0 --internalurl=http://$CONTROLLER_IP:5000/v2.0 --adminurl=http://$CONTROLLER_IP:35357/v2.0
 
 }
 
 validate() {
 
-  keystone --os-username=admin --os-password=$ADMINPASS --os-auth-url=http://127.0.0.1:35357/v2.0 token-get
+  keystone --os-username=admin --os-password=$ADMINPASS --os-auth-url=http://$CONTROLLER_IP:35357/v2.0 token-get
 
 }
 
 clean() {
 
-  userdel -r keystone
-
+  mysql -e "DROP DATABASE keystone;"
   rm -r /etc/keystone/
-  sh /etc/rc.d/rc.mysqld stop
-  rm -r /var/lib/mysql/*
+  userdel -r keystone
 
 }
 
