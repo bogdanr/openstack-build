@@ -27,6 +27,20 @@ setupsql() {
 
 }
 
+setuprabbit() {
+
+  ( cd /tmp && wget http://packages.nimblex.net/nimblex/rabbitmq-server-3.1.5-x86_64-1.txz && wget http://packages.nimblex.net/nimblex/erlang-otp-16B03-x86_64-1.txz )
+  installpkg /tmp/rabbitmq-server-*-x86_64-1.txz
+  installpkg /tmp/erlang-otp-*-x86_64-1.txz
+  useradd -d /var/lib/rabbitmq/ rabbitmq
+  chown rabbitmq /var/lib/rabbitmq/
+  sed -i 's/127.0.0.1/0.0.0.0/' /etc/rabbitmq/rabbitmq-env.conf
+  sed -i 's/example/openstack/' /etc/rabbitmq/rabbitmq-env.conf
+  chmod +x /etc/rc.d/rc.rabbitmq
+  /etc/rc.d/rc.rabbitmq start
+
+}
+
 install() {
 
   easy_install pip pbr MySQL-python
@@ -36,8 +50,6 @@ install() {
   useradd -s /bin/false -d /var/lib/keystone -m keystone
 
   python setup.py install
-
-  ( cd /tmp && wget http://packages.nimblex.net/nimblex/rabbitmq-server-3.1.5-x86_64-1.txz && installpkg rabbitmq-server-3.1.5-x86_64-1.txz )
 
   mkdir -p /etc/keystone/ssl/{private,certs} /var/log/openstack
   touch /var/log/openstack/keystone.log
@@ -106,6 +118,10 @@ clean() {
 
 if [[ ! -d /var/lib/mysql/mysql/ ]]; then
   setupsql
+fi
+
+if [[ ! -f /usr/bin/rabbitmq-server ]]; then
+  setuprabbit
 fi
 
 if [[ ! -f /etc/keystone/keystone.conf ]]; then

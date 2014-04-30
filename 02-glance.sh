@@ -7,6 +7,7 @@ set -x
 
 GLANCEPASS="`openssl rand -base64 16`"
 KEYSTONEPASS="`openssl rand -hex 16`"
+REGISTRYCONF=/etc/glance/glance-registry.conf
 
 setupsql() {
 
@@ -28,7 +29,8 @@ install() {
 
   chown -R glance /etc/glance /var/log/openstack/glance-*
 
-  REGISTRYCONF=/etc/glance/glance-registry.conf
+  cd ..
+
   APICONF=/etc/glance/glance-api.conf
 
   sed -i "s,#connection = <None>,connection = mysql://glance:$GLANCEPASS@127.0.0.1/glance," $REGISTRYCONF
@@ -81,7 +83,7 @@ if [[ ! -d /var/lib/mysql/glance/ ]]; then
   setupsql
 fi
 
-if [[ ! -f $REGISTYCONF ]]; then
+if [[ ! -f $REGISTRYCONF ]]; then
   install
 fi
 
