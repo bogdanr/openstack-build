@@ -33,7 +33,7 @@ setuprabbit() {
   installpkg /tmp/rabbitmq-server-*-x86_64-1.txz
   installpkg /tmp/erlang-otp-*-x86_64-1.txz
   useradd -d /var/lib/rabbitmq/ rabbitmq
-  chown rabbitmq /var/lib/rabbitmq/
+  chown rabbitmq /var/{lib,log}/rabbitmq/
   sed -i 's/127.0.0.1/0.0.0.0/' /etc/rabbitmq/rabbitmq-env.conf
   sed -i 's/example/openstack/' /etc/rabbitmq/rabbitmq-env.conf
   chmod +x /etc/rc.d/rc.rabbitmq

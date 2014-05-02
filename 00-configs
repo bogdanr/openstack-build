@@ -3,5 +3,9 @@
 CONTROLLER_IP="10.10.10.1"
 CONTROLLER_IP="127.0.0.1"
 
+# These are the interfaces for private and public networks on our compute nodes
+FLAT_IFACE="enp5s0"
+PUB_IFACE="enp5s0"
+
 ADMINPASS="AnaAre3Mere"
 
