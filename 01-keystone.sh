@@ -23,8 +23,6 @@ setupsql() {
   sh /etc/rc.d/rc.mysqld restart
 
   sleep 5
-  mysql -e "CREATE DATABASE keystone; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY '$KEYSTONEPASS'; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY '$KEYSTONEPASS';"
-
 }
 
 setuprabbit() {
@@ -41,6 +39,12 @@ setuprabbit() {
 
 }
 
+setupsql-keystone() {
+
+  mysql -e "CREATE DATABASE keystone; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY '$KEYSTONEPASS';"
+
+}
+
 install() {
 
   easy_install pip pbr MySQL-python
@@ -53,7 +57,7 @@ install() {
 
   mkdir -p /etc/keystone/ssl/{private,certs} /var/log/openstack
   touch /var/log/openstack/keystone.log
-  cp ../openssl.conf /etc/keystone/ssl/certs/
+  cp ../openstack-files/openssl.conf /etc/keystone/ssl/certs/
   chown -R keystone /etc/keystone/ /var/log/openstack/keystone.log
 
   CONF="/etc/keystone/keystone.conf"
@@ -122,6 +126,10 @@ fi
 
 if [[ ! -f /usr/bin/rabbitmq-server ]]; then
   setuprabbit
+fi
+
+if [[ ! -d /var/lib/mysql/keystone/ ]]; then
+  setupsql-keystone
 fi
 
 if [[ ! -f /etc/keystone/keystone.conf ]]; then

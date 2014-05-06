@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenStack Identity Service (code-named Keystone)
+After=network.target
+
+[Service]
+Type=notify
+Restart=always
+User=keystone
+ExecStart=/usr/bin/keystone-all
+
+[Install]
+WantedBy=multi-user.target
