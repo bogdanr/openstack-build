@@ -1,5 +1,11 @@
 *~
+*.lzm
 keystone
 glance
 nova
 horizon
+
+openstack-etc
+openstack-python
+openstack-controller
+openstack-compute
