@@ -12,7 +12,6 @@ build-requirements() {
   rm -rf $PKG
   mkdir $PKG
 
-  pip install --root=$PKG pbr
   pip install --root=$PKG MySQL-python	# This requires MySQL or MariaDB to be installed
   pip install --root=$PKG -r requirements-all.txt
   pip install --root=$PKG libvirt-python

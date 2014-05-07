@@ -3,6 +3,7 @@
 set -e
 set -x
 
+AUFS="aufs-temp"
 PKGCTL=openstack-controller
 PKGCOM=openstack-compute
 
@@ -62,13 +63,13 @@ setup-glance() {
 
 setup-controller() {
 
-  rm -rf $PKGCTL /tmp/$PKGCTL
+  rm -rf $PKGCTL
   mkdir -p $PKGCTL /tmp/$PKGCTL
 
-  wget -P /tmp/$PKGCTL http://packages.nimblex.net/nimblex/mariadb-5.5.37-x86_64-1.txz
-  wget -P /tmp/$PKGCTL http://packages.nimblex.net/nimblex/erlang-otp-16B03-x86_64-1.txz
-  wget -P /tmp/$PKGCTL http://packages.nimblex.net/nimblex/rabbitmq-server-3.3.1-x86_64-1.txz
-  wget -P /tmp/$PKGCTL http://packages.nimblex.net/slackware64/slackware64/n/ntp-4.2.6p5-x86_64-5.txz
+  wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/mariadb-5.5.37-x86_64-1.txz
+  wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/erlang-otp-16B03-x86_64-1.txz
+  wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/rabbitmq-server-3.3.1-x86_64-1.txz
+  wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/slackware64/slackware64/n/ntp-4.2.6p5-x86_64-5.txz
 
   installpkg -root $PKGCTL /tmp/$PKGCTL/*.txz
 
@@ -97,7 +98,7 @@ setup-compute() {
   rm -rf $PKGCOM
   mkdir -p $PKGCOM
 
-  wget -P /tmp/$PKGCTL http://packages.nimblex.net/slackware64/slackware64/n/ntp-4.2.6p5-x86_64-5.txz
+  wget -NP /tmp/$PKGCTL http://packages.nimblex.net/slackware64/slackware64/n/ntp-4.2.6p5-x86_64-5.txz
 
   # We start services by defautl if this package is loaded.
   mkdir -p $PKGCTL/etc/systemd/system/multi-user.target.wants/
@@ -107,18 +108,21 @@ setup-compute() {
 
 boot-test() {
 
-  AUFS="aufs-temp"
   mkdir -p $AUFS /tmp/openstack-mem
-  umount $AUFS
-  umount /tmp/openstack-mem
   mount -t tmpfs -o size=200m tmpfs /tmp/openstack-mem/
   mount -t aufs -o xino=/mnt/live/memory/aufs.xino,br:/tmp/openstack-mem none $AUFS
   mount -t aufs -o remount,append:$PKGCTL=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/virtualization-backend.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/openstack-python.lzm=ro none $AUFS
+  mount -t aufs -o remount,append:/mnt/live/memory/bundles/02-Xorg64.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/01-Core64.lzm=ro none $AUFS
 
-  systemd-nspawn -bD $AUFS
+  # This should work very nicely if we have libvirtd
+  if ip addr show dev virbr0 >/dev/null; then
+    systemd-nspawn --network-bridge=virbr0 -bD $AUFS
+  else
+    systemd-nspawn --network-veth -bD $AUFS
+  fi
 
 }
 
@@ -136,9 +140,10 @@ else
          ;;
          "test" )
           echo "...PREPARING"
+          mountpoint -q $AUFS && umount $AUFS
+          mountpoint -q /tmp/openstack-mem && umount /tmp/openstack-mem
 	  [[ -d $PKGCTL ]] && rm -r $PKGCTL
-          setup-keystone
-	  setup-glance
+          setup-controller
           echo "...TESTING"
           boot-test
          ;;
