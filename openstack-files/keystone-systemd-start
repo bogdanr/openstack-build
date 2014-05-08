@@ -1,0 +1,51 @@
+#!/bin/bash
+
+. /etc/openstack-cfg
+
+validate() {
+  keystone --os-username=admin --os-password=$ADMINPASS --os-auth-url=http://127.0.0.1:35357/v2.0 token-get
+}
+
+pre-start() {
+
+  chown -R keystone:keystone /var/log/openstack/keystone.log /var/lib/keystone /etc/keystone
+
+  if [[ ! -d `my_print_defaults server mysql | awk -F "=" '{print $2}'`/keystone ]]; then
+	mysql -e "CREATE DATABASE keystone; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY '`awk '/connection = mysql/ {print substr($3,18,24)}' /etc/keystone/keystone.conf`'; FLUSH PRIVILEGES;"
+	keystone-manage db_sync
+  fi
+
+  if [[ ! -f /etc/keystone/ssl/private/cakey.pem ]]; then
+	su -s /bin/sh -c 'exec keystone-manage pki_setup' keystone
+  fi
+
+}
+
+post-start() {
+
+
+  if ! validate; then
+	export OS_SERVICE_ENDPOINT=http://$CONTROLLER_IP:35357/v2.0
+	export OS_SERVICE_TOKEN=`awk -F '=' '/admin_token=/ {print $2}' /etc/keystone/keystone.conf`
+
+	keystone role-create --name=admin
+	keystone user-create --name=admin --pass=$ADMINPASS --email=bogdan@nimblex.net
+	keystone tenant-create --name=admin --description="Admin Tenant"
+      	keystone user-role-add --user=admin --tenant=admin --role=admin
+	keystone user-role-add --user=admin --role=_member_ --tenant=admin
+
+	keystone user-create --name=demo --pass=demo
+	keystone tenant-create --name=demo --description="Demo Tenant"
+	keystone user-role-add --user=demo --role=_member_ --tenant=demo
+
+	keystone tenant-create --name=service --description="Service Tenant"
+	keystone service-create --name=keystone --type=identity --description="OpenStack Identity"
+	keystone endpoint-create --service-id=$(keystone service-list | awk '/ identity / {print $2}') --publicurl=http://$CONTROLLER_IP:5000/v2.0 --internalurl=http://$CONTROLLER_IP:5000/v2.0 --adminurl=http://$CONTROLLER_IP:35357/v2.0
+  fi
+}
+
+case $1 in
+    "pre-start") pre-start ;;
+    "post-start") post-start ;;
+    "validate") validate ;;
+esac

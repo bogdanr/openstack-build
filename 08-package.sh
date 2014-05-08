@@ -27,6 +27,9 @@ setup-keystone() {
   sed -i "s,#log_dir=<None>,log_dir=/var/log/openstack," $KCONF
   sed -i "s,#log_file=<None>,log_file=keystone.log," $KCONF
 
+  cp openstack-files/systemd/openstack-keystone.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  cp openstack-files/keystone-systemd-start $PKGCTL/usr/bin/
+
   # This must happen at first boot or factory reset
   # keystone-manage db_sync
   # su -s /bin/sh -c 'exec keystone-manage pki_setup' keystone
@@ -80,12 +83,16 @@ setup-controller() {
   # cp openstack-files/datadir.cnf $PKGCTL/etc/my.cnf.d/
   cp openstack-files/utf8.cnf $PKGCTL/etc/my.cnf.d/
   cp openstack-files/rabbitmq-env.conf $PKGCTL/etc/rabbitmq/
+  cp 00-configs $PKGCTL/etc/openstack-cfg
 
   # We start services by defautl if this package is loaded.
-  mkdir -p $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  mkdir -p $PKGCTL/etc/systemd/system/{multi-user,network-target}.target.wants/
+  cp openstack-files/systemd/openstack-users.service $PKGCTL/lib/systemd/system/
+  ln -s /lib/systemd/system/openstack-users.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  ln -s /lib/systemd/system/multi-user.target $PKGCTL/etc/systemd/system/default.target
   ln -s /lib/systemd/system/mysqld.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
   ln -s /lib/systemd/system/rabbitmq.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
-  ln -s /lib/systemd/system/ntp-client.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  ln -s /lib/systemd/system/ntp-client.service $PKGCTL/etc/systemd/system/network-target.target.wants/
 
   setup-keystone
   setup-glance
@@ -101,8 +108,8 @@ setup-compute() {
   wget -NP /tmp/$PKGCTL http://packages.nimblex.net/slackware64/slackware64/n/ntp-4.2.6p5-x86_64-5.txz
 
   # We start services by defautl if this package is loaded.
-  mkdir -p $PKGCTL/etc/systemd/system/multi-user.target.wants/
-  ln -s /lib/systemd/system/ntp-client.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  mkdir -p $PKGCTL/etc/systemd/system/{multi-user,network-target}.target.wants/
+  ln -s /lib/systemd/system/ntp-client.service $PKGCTL/etc/systemd/system/network-target.target.wants/
 
 }
 
@@ -114,6 +121,7 @@ boot-test() {
   mount -t aufs -o remount,append:$PKGCTL=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/virtualization-backend.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/openstack-python.lzm=ro none $AUFS
+  mount -t aufs -o remount,append:/mnt/live/memory/bundles/vim-7.4.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/02-Xorg64.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/01-Core64.lzm=ro none $AUFS
 

@@ -1,0 +1,12 @@
+[Unit]
+Description=Make sure the users required by OpenStack services are added
+
+[Service]
+Type=oneshot
+
+ExecStart=/usr/sbin/useradd -rmd /var/lib/keystone keystone
+ExecStart=/usr/sbin/useradd -rmd /var/lib/glance  glance
+ExecStart=/usr/sbin/useradd -rmd /var/lib/nova nova
+
+[Install]
+WantedBy=multi-user.target

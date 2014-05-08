@@ -7,6 +7,8 @@ Type=notify
 Restart=always
 User=keystone
 ExecStart=/usr/bin/keystone-all
+ExecStartPre=/usr/bin/keystone-systemd-start pre-start
+PermissionsStartOnly=true
 
 [Install]
 WantedBy=multi-user.target
