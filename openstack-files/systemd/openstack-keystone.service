@@ -1,13 +1,14 @@
 [Unit]
 Description=OpenStack Identity Service (code-named Keystone)
-After=network.target
+After=mysqld.service
 
 [Service]
 Type=notify
-Restart=always
+Restart=on-failure
 User=keystone
 ExecStart=/usr/bin/keystone-all
 ExecStartPre=/usr/bin/keystone-systemd-start pre-start
+ExecStartPost=/usr/bin/keystone-systemd-start post-start
 PermissionsStartOnly=true
 
 [Install]

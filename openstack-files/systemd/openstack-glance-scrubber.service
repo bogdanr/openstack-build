@@ -1,6 +1,6 @@
 [Unit]
 Description=OpenStack Image Service deferred image deletion service
-After=network.target
+After=openstack-glance-registry.service
 
 [Service]
 Type=simple

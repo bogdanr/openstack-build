@@ -1,11 +1,13 @@
 [Unit]
 Description=OpenStack Image Service (code-named Glance) Registry server
-After=network.target
+After=openstack-keystone.service
 
 [Service]
 Type=simple
 User=glance
 ExecStart=/usr/bin/glance-registry
+ExecStartPre=/usr/bin/glance-systemd-start pre-start
+PermissionsStartOnly=true
 PrivateTmp=true
 
 [Install]

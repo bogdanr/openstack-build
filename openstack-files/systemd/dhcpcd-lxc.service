@@ -1,0 +1,13 @@
+[Unit]
+Description=Mask read-only /proc entries for %I.
+RequiredBy=dhcpcd@%I
+Before=dhcpcd@%I
+
+[Service]
+ExecStartPre=/bin/dd if=/proc/sys/net/ipv4/conf/%I/promote_secondaries of=/var/tmp/promote_secondaries_%I
+ExecStart=/bin/mount -o bind /var/tmp/promote_secondaries_%I /proc/sys/net/ipv4/conf/%I/promote_secondaries
+ExecStop=/bin/unmount /proc/sys/net/ipv4/conf/%I/promote_secondaries
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,40 @@
+#!/bin/bash
+
+. /etc/openstack-cfg
+
+validate() {
+  OS_USERNAME=admin OS_TENANT_NAME=admin OS_PASSWORD=$ADMINPASS OS_AUTH_URL=http://$CONTROLLER_IP:35357/v2.0 glance image-list
+}
+
+pre-start() {
+
+  chown -R glance:glance /var/log/openstack/glance-{api,registry,scrubber}.log /var/lib/glance /etc/glance
+
+  if [[ ! -d `my_print_defaults server mysql | awk -F "=" '{print $2}'`/glance ]]; then
+	mysql -e "CREATE DATABASE glance; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY '`awk '/connection = mysql/ {print substr($3,16,24)}' /etc/glance/glance-registry.conf`'; FLUSH PRIVILEGES;"
+	glance-manage db_sync
+  fi
+
+  if [[ `mysql -Nse "SELECT name FROM user WHERE name = 'glance'" keystone` = "" ]]; then
+	export OS_SERVICE_ENDPOINT=http://$CONTROLLER_IP:35357/v2.0
+	export OS_SERVICE_TOKEN=`awk -F '=' '/admin_token=/ {print $2}' /etc/keystone/keystone.conf`
+	keystone user-create --name=glance --pass=`awk '/admin_password =/ {print $3}' /etc/glance/glance-registry.conf` --email=glance@boxappliances.com
+	keystone user-role-add --user=glance --tenant=service --role=admin
+
+	keystone service-create --name=glance --type=image --description="Box Appliances Image Service"
+	keystone endpoint-create --service-id=$(keystone service-list | awk '/ image / {print $2}') --publicurl=http://$CONTROLLER_IP:9292 --internalurl=http://$CONTROLLER_IP:9292 --adminurl=http://$CONTROLLER_IP:9292
+  fi
+
+}
+
+post-start() {
+	echo "Here we need to make sure we have a few images imported"
+	OS_USERNAME=admin OS_TENANT_NAME=admin OS_PASSWORD=$ADMINPASS OS_AUTH_URL=http://$CONTROLLER_IP:35357/v2.0 glance image-create --name="cirros-0.3.2-x86_64" --disk-format=qcow2 --container-format=bare --is-public=true --copy-from http://cdn.download.cirros-cloud.net/0.3.2/cirros-0.3.2-x86_64-disk.img
+	validate
+}
+
+case $1 in
+    "pre-start") pre-start ;;
+    "post-start") post-start ;;
+    "validate") validate ;;
+esac

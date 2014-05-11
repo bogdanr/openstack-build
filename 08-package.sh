@@ -15,6 +15,7 @@ setup-keystone() {
   mkdir -p $PKGCTL/etc/keystone/ssl/{private,certs} $PKGCTL/var/log/openstack
   touch $PKGCTL/var/log/openstack/keystone.log
   cp openstack-files/openssl.conf $PKGCTL/etc/keystone/ssl/certs/
+  grep -wq keystone /etc/passwd || useradd -r keystone
   chown -R keystone $PKGCTL/etc/keystone/ $PKGCTL/var/log/openstack/keystone.log
 
   KCONF="$PKGCTL/etc/keystone/keystone.conf"
@@ -26,27 +27,29 @@ setup-keystone() {
 
   sed -i "s,#log_dir=<None>,log_dir=/var/log/openstack," $KCONF
   sed -i "s,#log_file=<None>,log_file=keystone.log," $KCONF
+  # In the future this will probably be removed but for now works OK
+  sed -i "s,#onready=<None>,onready = keystone.common.systemd," $KCONF
 
-  cp openstack-files/systemd/openstack-keystone.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  cp openstack-files/systemd/openstack-keystone.service $PKGCTL/lib/systemd/system/
+  ln -s /lib/systemd/system/openstack-keystone.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
   cp openstack-files/keystone-systemd-start $PKGCTL/usr/bin/
-
-  # This must happen at first boot or factory reset
-  # keystone-manage db_sync
-  # su -s /bin/sh -c 'exec keystone-manage pki_setup' keystone
 
 }
 
 setup-glance() {
 
   mkdir -p $PKGCTL/etc/glance $PKGCTL/var/log/openstack
-  touch $PKGCTL/var/log/openstack/glance-{api,registry}.log
+  touch $PKGCTL/var/log/openstack/glance-{api,registry,scrubber}.log
 
   cp glance/etc/glance-* glance/etc/*.json $PKGCTL/etc/glance/
 
-  chown -R glance $PKGCTL/etc/glance $PKGCTL/var/log/openstack/glance-*
+  grep -wq glance /etc/passwd || useradd -r glance
+  chown -R glance $PKGCTL/etc/glance $PKGCTL/var/log/openstack/glance-*.log
 
   GREGISTRYCONF=$PKGCTL/etc/glance/glance-registry.conf
   GAPICONF=$PKGCTL/etc/glance/glance-api.conf
+  GSCCONF=$PKGCTL/etc/glance/glance-scrubber.conf
+  KEYSTONEPASS="`openssl rand -hex 16`"
 
   sed -i "s,#connection = <None>,connection = mysql://glance:`openssl rand -base64 16`@127.0.0.1/glance," $GREGISTRYCONF
 
@@ -58,16 +61,24 @@ setup-glance() {
 
   sed -i "s,%SERVICE_TENANT_NAME%,service," $GAPICONF
   sed -i "s,%SERVICE_USER%,glance," $GAPICONF
-  sed -i "s,%SERVICE_PASSWORD%,`openssl rand -hex 16`," $GAPICONF
+  sed -i "s,%SERVICE_PASSWORD%,$KEYSTONEPASS," $GAPICONF
   sed -i "s,#flavor=,flavor = keystone," $GAPICONF
   sed -i "s,log_file = /var/log/glance/api.log,log_file = /var/log/openstack/glance-api.log," $GAPICONF
 
+  sed -i "s,log_file = /var/log/glance/scrubber.log,log_file = /var/log/openstack/glance-scrubber.log," $GSCCONF
+
+  cp openstack-files/systemd/openstack-glance-*.service $PKGCTL/lib/systemd/system/
+  ln -s /lib/systemd/system/openstack-glance-registry.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  ln -s /lib/systemd/system/openstack-glance-api.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  # We'll enable the scrubber at a later point when we'll think it helps us. For now we're not using delayed_delete
+  # ln -s /lib/systemd/system/openstack-glance-scrubber.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  cp openstack-files/glance-systemd-start $PKGCTL/usr/bin/
 }
 
 setup-controller() {
 
   rm -rf $PKGCTL
-  mkdir -p $PKGCTL /tmp/$PKGCTL
+  mkdir -p $PKGCTL/root /tmp/$PKGCTL
 
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/mariadb-5.5.37-x86_64-1.txz
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/erlang-otp-16B03-x86_64-1.txz
@@ -78,6 +89,9 @@ setup-controller() {
 
   # Clean up a little
   find $PKGCTL -type d -name examples -o -name src -o -name include | xargs rm -rf
+
+  # We enable connections for containers or others
+  sed "s,#pts/0,pts/0," /etc/securetty > $PKGCTL/etc/securetty
 
   # Config for the persistant MySQL datadir
   # cp openstack-files/datadir.cnf $PKGCTL/etc/my.cnf.d/
@@ -107,6 +121,11 @@ setup-compute() {
 
   wget -NP /tmp/$PKGCTL http://packages.nimblex.net/slackware64/slackware64/n/ntp-4.2.6p5-x86_64-5.txz
 
+  installpkg -root $PKGCTL /tmp/$PKGCTL/*.txz
+  
+  # We enable connections for containers or others
+  sed "s,#pts/0,pts/0," /etc/securetty > $PKGCTL/etc/securetty
+
   # We start services by defautl if this package is loaded.
   mkdir -p $PKGCTL/etc/systemd/system/{multi-user,network-target}.target.wants/
   ln -s /lib/systemd/system/ntp-client.service $PKGCTL/etc/systemd/system/network-target.target.wants/
@@ -115,7 +134,7 @@ setup-compute() {
 
 boot-test() {
 
-  mkdir -p $AUFS /tmp/openstack-mem
+  mkdir -p $AUFS /tmp/openstack-mem $PKGCTL/etc/wicd/scripts/preconnect
   mount -t tmpfs -o size=200m tmpfs /tmp/openstack-mem/
   mount -t aufs -o xino=/mnt/live/memory/aufs.xino,br:/tmp/openstack-mem none $AUFS
   mount -t aufs -o remount,append:$PKGCTL=ro none $AUFS
@@ -125,6 +144,12 @@ boot-test() {
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/02-Xorg64.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/01-Core64.lzm=ro none $AUFS
 
+  echo 'echo 0 > /var/tmp/promote_secondaries
+  mount -o bind /var/tmp/promote_secondaries /proc/sys/net/ipv4/conf/host0/promote_secondaries' > $PKGCTL/etc/wicd/scripts/preconnect/dhcpcd-lxc
+  chmod +x $PKGCTL/etc/wicd/scripts/preconnect/dhcpcd-lxc
+
+  # If we have tmux we split it to have another window were we can play
+  pgrep tmux >/dev/null && (sleep 5 && tmux split-window -hd "machinectl login aufs-temp")&
   # This should work very nicely if we have libvirtd
   if ip addr show dev virbr0 >/dev/null; then
     systemd-nspawn --network-bridge=virbr0 -bD $AUFS

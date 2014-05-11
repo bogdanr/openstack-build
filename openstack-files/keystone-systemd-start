@@ -23,7 +23,6 @@ pre-start() {
 
 post-start() {
 
-
   if ! validate; then
 	export OS_SERVICE_ENDPOINT=http://$CONTROLLER_IP:35357/v2.0
 	export OS_SERVICE_TOKEN=`awk -F '=' '/admin_token=/ {print $2}' /etc/keystone/keystone.conf`
@@ -42,6 +41,7 @@ post-start() {
 	keystone service-create --name=keystone --type=identity --description="OpenStack Identity"
 	keystone endpoint-create --service-id=$(keystone service-list | awk '/ identity / {print $2}') --publicurl=http://$CONTROLLER_IP:5000/v2.0 --internalurl=http://$CONTROLLER_IP:5000/v2.0 --adminurl=http://$CONTROLLER_IP:35357/v2.0
   fi
+
 }
 
 case $1 in
