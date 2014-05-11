@@ -1,0 +1,52 @@
+#!/bin/bash
+
+. /etc/openstack-cfg
+
+validate() {
+  OS_USERNAME=admin OS_TENANT_NAME=admin OS_PASSWORD=$ADMINPASS OS_AUTH_URL=http://$CONTROLLER_IP:35357/v2.0 nova image-list
+  OS_USERNAME=admin OS_TENANT_NAME=admin OS_PASSWORD=$ADMINPASS OS_AUTH_URL=http://$CONTROLLER_IP:35357/v2.0 nova net-list
+}
+
+pre-start() {
+
+  chown -R nova:nova /var/log/openstack/nova.log /var/lib/nova /etc/nova
+
+  if [[ ! -d `my_print_defaults server mysql | awk -F "=" '{print $2}'`/nova ]]; then
+	mysql -e "CREATE DATABASE nova; GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' IDENTIFIED BY '`awk '/connection = mysql/ {print substr($3,14,24)}' /etc/nova/nova.conf`'; FLUSH PRIVILEGES;"
+	nova-manage db sync
+  fi
+
+  if [[ `mysql -Nse "SELECT name FROM user WHERE name = 'nova'" keystone` = "" ]]; then
+	export OS_SERVICE_ENDPOINT=http://$CONTROLLER_IP:35357/v2.0
+	export OS_SERVICE_TOKEN=`awk -F '=' '/admin_token=/ {print $2}' /etc/keystone/keystone.conf`
+	keystone user-create --name=nova --pass=`awk '/admin_password =/ {print $3}' /etc/nova/nova.conf` --email=nova@boxappliances.com
+	keystone user-role-add --user=nova --tenant=service --role=admin
+
+	#FIXME: Most likely this should only happen on compute nodes
+	keystone service-create --name=nova --type=compute --description="Box Appliances Compute"
+	keystone endpoint-create --service-id=$(keystone service-list | awk '/ compute / {print $2}') --publicurl=http://$CONTROLLER_IP:8774/v2/%\(tenant_id\)s --internalurl=http://$CONTROLLER_IP:8774/v2/%\(tenant_id\)s --adminurl=http://$CONTROLLER_IP:8774/v2/%\(tenant_id\)s
+  fi
+
+}
+
+post-start() {
+  validate
+}
+
+net-add() {
+
+if [[ $(mysql -u nova -p`awk '/connection = mysql/ {print substr($3,14,24)}' /etc/nova/nova.conf` -Nse "SELECT cidr FROM networks" nova) = "" ]]; then
+	#FIXME: We have to determine the interface we use
+	sleep 20
+	OS_USERNAME=admin OS_TENANT_NAME=admin OS_PASSWORD=$ADMINPASS OS_AUTH_URL=http://$CONTROLLER_IP:35357/v2.0 \
+	nova network-create box-net --bridge-interface=host0 --bridge br100 --multi-host T --fixed-range-v4 10.0.123.0/24
+  fi
+
+}
+
+case $1 in
+    "pre-start") pre-start ;;
+    "post-start") post-start ;;
+    "net-add") net-add ;;
+    "validate") validate ;;
+esac

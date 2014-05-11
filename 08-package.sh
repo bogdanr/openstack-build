@@ -75,6 +75,78 @@ setup-glance() {
   cp openstack-files/glance-systemd-start $PKGCTL/usr/bin/
 }
 
+setup-nova() {
+
+  mkdir -p $PKGCTL/etc/{nova,sudoers.d} $PKGCTL/var/log/openstack $PKGCTL/var/lib/nova/instances
+  touch $PKGCTL/var/log/openstack/nova.log
+
+  NOVACONF=$PKGCTL/etc/nova/nova.conf
+  KEYSTONEPASS="`openssl rand -hex 16`"
+  CONTROLLER_IP=127.0.0.1	#FIXME
+
+  cp nova/etc/nova/nova.conf.sample $NOVACONF
+  cp nova/etc/nova/*.json $PKGCTL/etc/nova/
+  cp nova/etc/nova/api-paste.ini $PKGCTL/etc/nova/
+
+  grep -wq nova /etc/passwd || useradd -r nova
+  chown -R nova $PKGCTL/etc/nova $PKGCTL/var/log/openstack/nova.log $PKGCTL/var/lib/nova/instances
+
+  # This should be owned and only writable by root
+  cp -a nova/etc/nova/{rootwrap.d,rootwrap.conf} $PKGCTL/etc/nova
+  echo 'nova ALL = (root) NOPASSWD: /usr/bin/nova-rootwrap /etc/nova/rootwrap.conf *' > $PKGCTL/etc/sudoers.d/openstack
+
+  sed -i "s,#connection=<None>,connection = mysql://nova:`openssl rand -base64 16`@$CONTROLLER_IP/nova," $NOVACONF
+
+  sed -i "s,#rabbit_host=nova,rabbit_host = $CONTROLLER_IP," $NOVACONF
+  sed -i "s,#my_ip=10.0.0.1,my_ip = $CONTROLLER_IP," $NOVACONF	#FIXME: This is stupid but works for testing on one machine :)
+  sed -i "s,#vncserver_listen=127.0.0.1,vncserver_listen = $CONTROLLER_IP," $NOVACONF
+  sed -i "s,#vncserver_proxyclient_address=127.0.0.1,vncserver_proxyclient_address = $CONTROLLER_IP," $NOVACONF	#FIXME: Same as my_ip
+
+  sed -i "s,#log_file=<None>,log_file = /var/log/openstack/nova.log," $NOVACONF
+  sed -i "s,#lock_path=<None>,lock_path = /var/lib/nova/," $NOVACONF
+
+  sed -i "s,#auth_strategy=noauth,auth_strategy = keystone," $NOVACONF
+  sed -i "s,#auth_uri=<None>,auth_uri = http://$CONTROLLER_IP:5000," $NOVACONF
+  sed -i "s,#identity_uri=<None>,identity_uri = http://$CONTROLLER_IP:35357," $NOVACONF
+
+  sed -i "s,#admin_user=<None>,admin_user = nova," $NOVACONF
+  sed -i "s,#admin_password=<None>,admin_password = $KEYSTONEPASS," $NOVACONF
+  sed -i "s,#admin_tenant_name=admin,admin_tenant_name = service," $NOVACONF
+
+  # We'll stick to nova-network for now
+  sed -i "s,#network_api_class=nova.network.api.API,network_api_class = nova.network.api.API," $NOVACONF
+  sed -i "s,#security_group_api=nova,security_group_api = nova," $NOVACONF
+
+  # These are only needed for compute nodes
+  sed -i "s,#glance_host=\$my_ip,glance_host = $CONTROLLER_IP," $NOVACONF
+  sed -i "s,#novncproxy_base_url=http://127.0.0.1:6080/vnc_auto.html,novncproxy_base_url = http://$CONTROLLER_IP:6080/vnc_auto.html," $NOVACONF
+  sed -i "s,#compute_driver=<None>,compute_driver = libvirt.LibvirtDriver," $NOVACONF
+  sed -i "s,#state_path=\$pybasedir,state_path = /var/lib/nova," $NOVACONF
+  # mkdir -p /var/lib/nova/instances # Kept here just as a reference that it's needed for compute nodes.
+  sed -i "s,#firewall_driver=<None>,firewall_driver = nova.virt.libvirt.firewall.IptablesFirewallDriver," $NOVACONF
+  sed -i "s,#network_manager=nova.network.manager.VlanManager,network_manager = nova.network.manager.FlatDHCPManager," $NOVACONF
+  sed -i "s,#network_size=256,network_size = 254," $NOVACONF
+  sed -i "s,#allow_same_net_traffic=true,allow_same_net_traffic = False," $NOVACONF
+  sed -i "s,#multi_host=false,multi_host = True," $NOVACONF
+  sed -i "s,#send_arp_for_ha=false,send_arp_for_ha = True," $NOVACONF
+  sed -i "s,#share_dhcp_address=false,share_dhcp_address = True," $NOVACONF
+  sed -i "s,#force_dhcp_release=true,force_dhcp_release = True," $NOVACONF
+  sed -i "s,#flat_network_bridge=<None>,flat_network_bridge = br100," $NOVACONF
+  sed -i "s,#flat_interface=<None>,flat_interface = $FLAT_IFACE," $NOVACONF
+  sed -i "s,#public_interface=eth0,public_interface = $PUB_IFACE," $NOVACONF
+  sed -i "s,#bindir=/usr/local/bin,bindir=/usr/bin," $NOVACONF
+  sed -i "s,#dhcpbridge_flagfile=/etc/nova/nova-dhcpbridge.conf,dhcpbridge_flagfile = /etc/nova/nova.conf," $NOVACONF
+
+  cp openstack-files/systemd/openstack-nova-*.service $PKGCTL/lib/systemd/system/
+  ln -s /lib/systemd/system/openstack-nova-api.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  ln -s /lib/systemd/system/openstack-nova-cert.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  ln -s /lib/systemd/system/openstack-nova-consoleauth.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  ln -s /lib/systemd/system/openstack-nova-scheduler.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  ln -s /lib/systemd/system/openstack-nova-conductor.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  ln -s /lib/systemd/system/openstack-nova-network.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+  cp openstack-files/nova-systemd-start $PKGCTL/usr/bin/
+}
+
 setup-controller() {
 
   rm -rf $PKGCTL
@@ -102,14 +174,19 @@ setup-controller() {
   # We start services by defautl if this package is loaded.
   mkdir -p $PKGCTL/etc/systemd/system/{multi-user,network-target}.target.wants/
   cp openstack-files/systemd/openstack-users.service $PKGCTL/lib/systemd/system/
+  cp openstack-files/systemd/libvirtd.service $PKGCTL/lib/systemd/system/
   ln -s /lib/systemd/system/openstack-users.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
   ln -s /lib/systemd/system/multi-user.target $PKGCTL/etc/systemd/system/default.target
   ln -s /lib/systemd/system/mysqld.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
   ln -s /lib/systemd/system/rabbitmq.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
   ln -s /lib/systemd/system/ntp-client.service $PKGCTL/etc/systemd/system/network-target.target.wants/
 
+  # Unless we have lots of RAM on the controller or we are testing this should not be enabled
+  ln -s /lib/systemd/system/libvirtd.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
+
   setup-keystone
   setup-glance
+  setup-nova
 
 }
 
@@ -128,8 +205,11 @@ setup-compute() {
 
   # We start services by defautl if this package is loaded.
   mkdir -p $PKGCTL/etc/systemd/system/{multi-user,network-target}.target.wants/
+  cp openstack-files/systemd/libvirtd.service $PKGCTL/lib/systemd/system/
   ln -s /lib/systemd/system/ntp-client.service $PKGCTL/etc/systemd/system/network-target.target.wants/
+  ln -s /lib/systemd/system/libvirtd.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
 
+  setup-nova
 }
 
 boot-test() {

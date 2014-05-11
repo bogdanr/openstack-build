@@ -1,6 +1,6 @@
 [Unit]
 Description=OpenStack Nova Console Proxy Server
-After=syslog.target network.target
+After=openstack-nova-api.service
 
 [Service]
 Type=simple

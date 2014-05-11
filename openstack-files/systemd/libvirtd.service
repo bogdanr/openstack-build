@@ -1,0 +1,15 @@
+# This can be improved with socket activation and an environment but should be good enough for now
+
+[Unit]
+Description=Virtualization daemon
+Before=libvirt-guests.service
+After=network.target
+After=dbus.service
+
+[Service]
+ExecStart=/usr/sbin/libvirtd
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

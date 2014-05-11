@@ -11,6 +11,7 @@ pre-start() {
   chown -R keystone:keystone /var/log/openstack/keystone.log /var/lib/keystone /etc/keystone
 
   if [[ ! -d `my_print_defaults server mysql | awk -F "=" '{print $2}'`/keystone ]]; then
+	mysql -e "DROP USER ''@'localhost'"
 	mysql -e "CREATE DATABASE keystone; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY '`awk '/connection = mysql/ {print substr($3,18,24)}' /etc/keystone/keystone.conf`'; FLUSH PRIVILEGES;"
 	keystone-manage db_sync
   fi

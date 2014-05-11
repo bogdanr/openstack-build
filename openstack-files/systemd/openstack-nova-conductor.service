@@ -1,6 +1,6 @@
 [Unit]
 Description=OpenStack Nova Conductor Server
-After=network.target
+After=openstack-nova-api.service
 
 [Service]
 Type=simple

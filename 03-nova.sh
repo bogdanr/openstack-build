@@ -23,7 +23,7 @@ install() {
 
   python setup.py install
 
-  useradd -s /bin/false -d /var/lib/nova -m nova
+  grep -wq nova /etc/passwd || useradd -rs /bin/false -d /var/lib/nova -m nova
   mkdir -p /etc/nova
   touch /var/log/openstack/nova.log
 
@@ -38,7 +38,7 @@ install() {
   chown -R nova /etc/nova /var/log/openstack/nova*
 
   # This should be owned and only writable by root
-  cp -a etc/nova/rootwrap.d /etc/nova
+  cp -a etc/nova/{rootwrap.d,rootwrap.conf} /etc/nova
 
   sed -i "s,#connection=<None>,connection = mysql://nova:$NOVAPASS@$CONTROLLER_IP/nova," $NOVACONF
   unset NOVAPASS

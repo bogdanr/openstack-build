@@ -1,11 +1,13 @@
 [Unit]
 Description=OpenStack Nova API Server
-After=network.target
+After=openstack-keystone.service
 
 [Service]
 Type=simple
 User=nova
 ExecStart=/usr/bin/nova-api
+ExecStartPre=/usr/bin/nova-systemd-start pre-start
+PermissionsStartOnly=true
 
 [Install]
 WantedBy=multi-user.target

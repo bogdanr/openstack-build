@@ -1,11 +1,12 @@
 [Unit]
 Description=OpenStack Nova Network Server
-After=network.target
+After=openstack-nova-api.service openstack-nova-conductor.service
 
 [Service]
 Type=simple
 User=nova
 ExecStart=/usr/bin/nova-network
+ExecStartPost=/usr/bin/nova-systemd-start net-add
 
 # Don't kill dnsmasq on shutdown (#805947)
 KillMode=process
