@@ -165,10 +165,10 @@ setup-controller() {
   # We enable connections for containers or others
   sed "s,#pts/0,pts/0," /etc/securetty > $PKGCTL/etc/securetty
 
-  # Config for the persistant MySQL datadir
   # cp openstack-files/datadir.cnf $PKGCTL/etc/my.cnf.d/
   cp openstack-files/utf8.cnf $PKGCTL/etc/my.cnf.d/
   cp openstack-files/rabbitmq-env.conf $PKGCTL/etc/rabbitmq/
+  cp openstack-files/openstack-test $PKGCTL/usr/bin
   cp 00-configs $PKGCTL/etc/openstack-cfg
 
   # We start services by defautl if this package is loaded.
@@ -231,6 +231,7 @@ boot-test() {
   # If we have tmux we split it to have another window were we can play
   pgrep tmux >/dev/null && (sleep 5 && tmux split-window -hd "machinectl login aufs-temp")&
   # This should work very nicely if we have libvirtd
+  grep -q ebtables /proc/modules || modprobe ebtables
   if ip addr show dev virbr0 >/dev/null; then
     systemd-nspawn --network-bridge=virbr0 -bD $AUFS
   else

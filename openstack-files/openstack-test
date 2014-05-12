@@ -1,0 +1,50 @@
+#!/bin/bash
+#set -x
+set -e
+
+# This will be our simplified testing framework
+
+echo '. /etc/openstack-cfg
+export OS_USERNAME=admin
+export OS_TENANT_NAME=admin
+export OS_PASSWORD=$ADMINPASS
+export OS_AUTH_URL=http://$CONTROLLER_IP:35357/v2.0' > /root/admin-openrc.sh
+
+if [[ `ip addr | awk '/10.0.123.1/'` = "" ]]; then
+	#FIXME: Determine what interface we should use here more generally
+	ip addr add 10.0.123.1 dev host0
+fi
+
+ssh-keygen -qf /root/.ssh/id_rsa -N ""
+. /root/admin-openrc.sh
+
+nova keypair-add --pub-key ~/.ssh/id_rsa.pub demo-key
+
+nova keypair-list
+nova flavor-list
+nova net-list
+
+if [[ `nova image-list | awk '/cirros/ {print $4}'` = "" ]]; then
+	/usr/bin/glance-systemd-start post-start
+fi
+
+nova secgroup-add-rule default tcp 22 22 0.0.0.0/0
+nova secgroup-add-rule default icmp -1 -1 0.0.0.0/0
+nova secgroup-list
+
+nova boot --flavor m1.tiny --image `nova image-list | awk '/cirros/ {print $4}'` --nic net-id=`nova net-list | awk '/box-net/ {print $2}'` --security-group default --key-name demo-key demo-instance1
+
+nova list
+sleep 5
+nova list
+sleep 30
+nova list
+sleep 5
+nova list
+
+nova get-vnc-console demo-instance1 novnc
+
+ping -c 3 boxappliances.com
+
+
+echo "If all looks good so far you should try to SSH into your instance"
