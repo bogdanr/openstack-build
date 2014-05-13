@@ -1,0 +1,24 @@
+#!/bin/bash
+
+validate() {
+  curl http://localhost
+}
+
+pre-start() {
+
+  grep -q mod_wsgi.conf /etc/httpd/httpd.conf || echo "Include /etc/httpd/extra/mod_wsgi.conf" >> /etc/httpd/httpd.conf
+  grep -q openstack.conf /etc/httpd/httpd.conf || echo "Include /etc/httpd/extra/openstack.conf" >> /etc/httpd/httpd.conf
+  chown -R horizon:horizon /var/www/openstack_dashboard/local
+
+}
+
+post-start() {
+  validate
+}
+
+
+case $1 in
+    "pre-start") pre-start ;;
+    "post-start") post-start ;;
+    "validate") validate ;;
+esac

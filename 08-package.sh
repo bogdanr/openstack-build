@@ -147,14 +147,30 @@ setup-nova() {
   cp openstack-files/nova-systemd-start $PKGCTL/usr/bin/
 }
 
+setup-horizon() {
+  
+  WWW=/var/www
+  mkdir -p $PKGCTL/{etc/httpd,$WWW,usr/bin}
+  cp -a horizon/openstack_dashboard $PKGCTL$WWW
+  cp -a openstack-files/horizon/static/* $PKGCTL$WWW/openstack_dashboard/static/dashboard/
+  cp -a openstack-files/horizon/openstack.conf $PKGCTL/etc/httpd/extra/
+  ln -s $WWW/openstack_dashboard/static $PKGCTL$WWW/static
+  sed "s/#ALLOWED_HOSTS = \['horizon.example.com', \]/ALLOWED_HOSTS = \['*'\]/" $PKGCTL$WWW/openstack_dashboard/local/local_settings.py.example > $PKGCTL$WWW/openstack_dashboard/local/local_settings.py
+
+  cp openstack-files/systemd/httpd.service $PKGCTL/lib/systemd/system/
+  cp openstack-files/horizon-systemd-start $PKGCTL/usr/bin/
+
+}
+
 setup-controller() {
 
   rm -rf $PKGCTL
-  mkdir -p $PKGCTL/root /tmp/$PKGCTL
+  mkdir -p $PKGCTL/root/.ssh /tmp/$PKGCTL
 
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/mariadb-5.5.37-x86_64-1.txz
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/erlang-otp-16B03-x86_64-1.txz
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/rabbitmq-server-3.3.1-x86_64-1.txz
+  wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/mod_wsgi-3.4-x86_64-1.txz
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/slackware64/slackware64/n/ntp-4.2.6p5-x86_64-5.txz
 
   installpkg -root $PKGCTL /tmp/$PKGCTL/*.txz
@@ -181,15 +197,20 @@ setup-controller() {
   ln -s /lib/systemd/system/rabbitmq.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
   ln -s /lib/systemd/system/ntp-client.service $PKGCTL/etc/systemd/system/network-target.target.wants/
 
+  ln -s /lib/systemd/system/sshd.service $PKGCTL/etc/systemd/system/multi-user.target.wants/sshd.service
+  #FIXME: The keys generated here should be stored in a persistant location
+  ln -s /lib/systemd/system/sshdgenkeys.service $PKGCTL/etc/systemd/system/multi-user.target.wants/sshdgenkeys.service
+  cp /root/.ssh/id_rsa.pub $PKGCTL/root/.ssh/authorized_keys
+
   # Unless we have lots of RAM on the controller or we are testing this should not be enabled
   ln -s /lib/systemd/system/libvirtd.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
 
   setup-keystone
   setup-glance
   setup-nova
+  setup-horizon
 
 }
-
 
 setup-compute() {
 

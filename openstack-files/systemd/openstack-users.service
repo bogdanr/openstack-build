@@ -7,6 +7,7 @@ Type=oneshot
 ExecStart=/usr/sbin/useradd -rmd /var/lib/keystone keystone
 ExecStart=/usr/sbin/useradd -rmd /var/lib/glance  glance
 ExecStart=/usr/sbin/useradd -rmd /var/lib/nova nova
+ExecStart=/usr/sbin/useradd -rmd /var/www/openstack_dashboard/local horizon
 
 [Install]
 WantedBy=multi-user.target
