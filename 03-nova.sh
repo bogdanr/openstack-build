@@ -24,7 +24,7 @@ install() {
   python setup.py install
 
   grep -wq nova /etc/passwd || useradd -rs /bin/false -d /var/lib/nova -m nova
-  mkdir -p /etc/nova
+  mkdir -p /etc/nova /var/log/openstack
   touch /var/log/openstack/nova.log
 
   pip install tox==1.6.1
