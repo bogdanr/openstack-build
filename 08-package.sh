@@ -4,11 +4,6 @@ set -e
 set -x
 
 AUFS="aufs-temp"
-PKGCTL=openstack-controller
-PKGCOM=openstack-compute
-
-# This will be used for testing faster
-PKGCTL=openstack-etc
 
 setup-keystone() {
 
@@ -150,33 +145,38 @@ setup-nova() {
 setup-horizon() {
   
   WWW=/var/www
-  mkdir -p $PKGCTL/{etc/httpd,$WWW,usr/bin}
-  cp -a horizon/openstack_dashboard $PKGCTL$WWW
+  mkdir -p $PKGCTL/{etc/httpd,$WWW/openstack_dashboard/static/dashboard,$WWW/openstack_dashboard/local,usr/bin}
   cp -a openstack-files/horizon/static/* $PKGCTL$WWW/openstack_dashboard/static/dashboard/
   cp -a openstack-files/horizon/openstack.conf $PKGCTL/etc/httpd/extra/
   ln -s $WWW/openstack_dashboard/static $PKGCTL$WWW/static
-  sed "s/#ALLOWED_HOSTS = \['horizon.example.com', \]/ALLOWED_HOSTS = \['*'\]/" $PKGCTL$WWW/openstack_dashboard/local/local_settings.py.example > $PKGCTL$WWW/openstack_dashboard/local/local_settings.py
+  sed "s/#ALLOWED_HOSTS = \['horizon.example.com', \]/ALLOWED_HOSTS = \['*'\]/;s/DEBUG = True/DEBUG = False/" $WWW/openstack_dashboard/local/local_settings.py.example > $PKGCTL$WWW/openstack_dashboard/local/local_settings.py
 
   cp openstack-files/systemd/httpd.service $PKGCTL/lib/systemd/system/
+  ln -s /lib/systemd/system/httpd.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
   cp openstack-files/horizon-systemd-start $PKGCTL/usr/bin/
 
 }
 
-setup-controller() {
+setup-controller-pkgs() {
 
-  rm -rf $PKGCTL
-  mkdir -p $PKGCTL/root/.ssh /tmp/$PKGCTL
+  mkdir -p /tmp/$PKGCTL
 
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/mariadb-5.5.37-x86_64-1.txz
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/erlang-otp-16B03-x86_64-1.txz
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/rabbitmq-server-3.3.1-x86_64-1.txz
-  wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/mod_wsgi-3.4-x86_64-1.txz
   wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/slackware64/slackware64/n/ntp-4.2.6p5-x86_64-5.txz
+  wget -nv -NP /tmp/$PKGCTL http://packages.nimblex.net/nimblex/pip-1.5.5-x86_64-1.txz
 
   installpkg -root $PKGCTL /tmp/$PKGCTL/*.txz
 
   # Clean up a little
   find $PKGCTL -type d -name examples -o -name src -o -name include | xargs rm -rf
+
+}
+
+setup-controller-cfgs() {
+
+  mkdir -p $PKGCTL/etc/systemd/system/{multi-user,network-target}.target.wants/ $PKGCTL/{root/.ssh,usr/bin,lib/systemd/system} $PKGCTL/etc/{my.cnf.d,rabbitmq,httpd/extra}
 
   # We enable connections for containers or others
   sed "s,#pts/0,pts/0," /etc/securetty > $PKGCTL/etc/securetty
@@ -188,7 +188,6 @@ setup-controller() {
   cp 00-configs $PKGCTL/etc/openstack-cfg
 
   # We start services by defautl if this package is loaded.
-  mkdir -p $PKGCTL/etc/systemd/system/{multi-user,network-target}.target.wants/
   cp openstack-files/systemd/openstack-users.service $PKGCTL/lib/systemd/system/
   cp openstack-files/systemd/libvirtd.service $PKGCTL/lib/systemd/system/
   ln -s /lib/systemd/system/openstack-users.service $PKGCTL/etc/systemd/system/multi-user.target.wants/
@@ -239,9 +238,11 @@ boot-test() {
   mount -t tmpfs -o size=200m tmpfs /tmp/openstack-mem/
   mount -t aufs -o xino=/mnt/live/memory/aufs.xino,br:/tmp/openstack-mem none $AUFS
   mount -t aufs -o remount,append:$PKGCTL=ro none $AUFS
+  mount -t aufs -o remount,append:/tmp/openstack-pkgs=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/virtualization-backend.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/openstack-python.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/vim-7.4.lzm=ro none $AUFS
+  mount -t aufs -o remount,append:/mnt/live/memory/bundles/07-Devel64.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/02-Xorg64.lzm=ro none $AUFS
   mount -t aufs -o remount,append:/mnt/live/memory/bundles/01-Core64.lzm=ro none $AUFS
 
@@ -264,21 +265,42 @@ boot-test() {
 
 if [[ -z $1 ]]; then
         echo "Tell me what to do"
-        echo "You options are: package and test"
+        echo "You options are:
+		build-ctl
+		build-cpt
+		build-pkgs
+		test"
 else
         case $1 in
-         "package" )
+         "build-ctl" )
+          PKGCTL=openstack-controller
           echo "...INSTALLING"
 	  [[ -d $PKGCTL ]] && rm -r $PKGCTL
-          setup-controller
+          setup-controller-pkgs
+          setup-controller-cfgs
+	  dir2lzm $PKGCTL
+         ;;
+         "build-cpt" )
+          PKGCOM=openstack-compute
+          echo "...INSTALLING"
+	  [[ -d $PKGCTL ]] && rm -r $PKGCTL
+          setup-compute
+	  dir2lzm $PKGCTL
+         ;;
+         "build-pkgs" )
+          PKGCTL=/tmp/openstack-pkgs
+          echo "...INSTALLING"
+	  [[ -d $PKGCTL ]] && rm -r $PKGCTL
+          setup-controller-pkgs
 	  dir2lzm $PKGCTL
          ;;
          "test" )
+          PKGCTL=openstack-etc
           echo "...PREPARING"
           mountpoint -q $AUFS && umount $AUFS
           mountpoint -q /tmp/openstack-mem && umount /tmp/openstack-mem
 	  [[ -d $PKGCTL ]] && rm -r $PKGCTL
-          setup-controller
+          setup-controller-cfgs
           echo "...TESTING"
           boot-test
          ;;
