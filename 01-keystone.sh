@@ -63,15 +63,15 @@ install() {
   CONF="/etc/keystone/keystone.conf"
   cp etc/keystone.conf.sample $CONF
   cp etc/keystone-paste.ini etc/policy.json /etc/keystone/
-  sed -i "s,#connection=<None>,connection = mysql://keystone:$KEYSTONEPASS@127.0.0.1/keystone," $CONF
+  sed -i "s,#connection = <None>,connection = mysql://keystone:$KEYSTONEPASS@127.0.0.1/keystone," $CONF
   unset KEYSTONEPASS
 
   keystone-manage db_sync
   export OS_SERVICE_TOKEN=`openssl rand -hex 10`
-  sed -i "s,#admin_token=ADMIN,admin_token=$OS_SERVICE_TOKEN," $CONF
+  sed -i "s,#admin_token = ADMIN,admin_token = $OS_SERVICE_TOKEN," $CONF
 
-  sed -i "s,#log_dir=<None>,log_dir=/var/log/openstack," $CONF
-  sed -i "s,#log_file=<None>,log_file=keystone.log," $CONF
+  sed -i "s,#log_dir = <None>,log_dir = /var/log/openstack," $CONF
+  sed -i "s,#log_file = <None>,log_file = keystone.log," $CONF
 
   su -s /bin/sh -c 'exec keystone-manage pki_setup' keystone
 
@@ -84,6 +84,7 @@ configure() {
 
 #	---  Define users, tenants, and roles ---
 #	http://docs.openstack.org/icehouse/install-guide/install/apt/content/keystone-users.html
+  echo "Executing the configure procedure"
 
   export OS_SERVICE_ENDPOINT=http://$CONTROLLER_IP:35357/v2.0
   export OS_SERVICE_TOKEN=`awk -F '=' '/admin_token=/ {print $2}' /etc/keystone/keystone.conf`
